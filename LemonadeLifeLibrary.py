@@ -6,6 +6,7 @@ def get_girl_name_list() -> list[str]:
         "Alisa",
         "Aino",
         "Astrid",
+        "Eerika",
         "Enni",
         "Esteri",
         "Minttu",
@@ -63,3 +64,6 @@ def generate_last_name() -> list[str]:
         "Koskinen",
         "Järvinen"
     ]
+
+def get_name_var_from_dict(itemsdict:dict) -> any:
+    return itemsdict["name"]
