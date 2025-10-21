@@ -12,6 +12,8 @@ class Business:
         self.id : int = Business.nextid
         self.workers : list = []
         self.max_customers: int = 0
+        self.stock : dict = {}
+        self.sellable_items : list = []
         Business.nextid += 1
     
     def set_owner(self, newOwner):
@@ -37,30 +39,6 @@ class Business:
 
     def remove_from_work(self, worker: "Entity"):
         self.workers.remove(worker)
-    
-    def sell(self, item):
-        print("Sold")
-
-    def run_business(self, market):
-        print("This business doesnt work yet")
-    
-class LemonadeStand(Business):
-    def __init__(self, owner, name = "Lemonade Shop"):
-        super().__init__(owner=owner, name=name, business_type="lemonade stand")
-        self.max_customers = 50
-        self.sellable_items: list = [
-            "lemonade",
-        ] 
-        self.stock = {
-            "lemon" : 0,
-            "lemonade" : 0
-        }
-
-    def __str__(self):
-        return self.name
-    
-    def get_stock(self):
-        return self.stock
 
     def buy_stock(self, market, item = None, amount = None) -> None:
         market : Market = market
@@ -79,7 +57,7 @@ class LemonadeStand(Business):
             while amount == None or not amount.isdigit():
                     amount = input("Amount:\n->")
         buy_price: int = round(market.get_buy_price(item) * int(amount), 1)
-        if buy_price == None:
+        if buy_price == None or not item in self.stock:
             print("Invalid item")
             return
         if buyer_ent.get_money() >= buy_price:
@@ -90,8 +68,33 @@ class LemonadeStand(Business):
         else:
             if type(buyer_ent) == Player:
                 print(f"You cannot afford the purchase of {amount} {item} for {buy_price}€.\nYou have {buyer_ent.get_money()}€")
+    
+    def sell(self, item):
+        print("Sold")
+
+    def run_business(self, market):
+        print("This business doesnt work yet")
+    
+class LemonadeStand(Business):
+    def __init__(self, owner, name = "Lemonade Shop"):
+        super().__init__(owner=owner, name=name, business_type="lemonade stand")
+        self.max_customers = 50
+        self.sellable_items: list = [
+            "lemonade",
+        ] 
+        self.stock = {
+            "lemon" : 0,
+            "lemonade" : 0,
+        }
+
+    def __str__(self):
+        return self.name
+    
+    def get_stock(self):
+        return self.stock
 
     def run_business(self, market:"Market"):
+        print("Running: run_business")
         #Check how many customers
         coming_customers : int = self.get_worker_sell_power() if self.get_worker_sell_power() <= self.max_customers else self.max_customers
         max_orders = 4
@@ -99,18 +102,22 @@ class LemonadeStand(Business):
         for x in orders:
             if self.stock[x] <= 0:
                 can_sell = 0
-                print("You dont have enough")
+                print(f"You are out of {x}")
             else:
-                can_sell : int = orders[x] if orders[x] > self.stock[x] else self.stock[x]
+                can_sell : int = orders[x] if orders[x] < self.stock[x] else self.stock[x]
             orders_price: int = market.get_sell_price(x) * can_sell
+            if self.stock[x] > 0:
+                print(f"You sold {can_sell} {x} for {orders_price}€")
+            if can_sell == self.stock[x] and self.stock[x] != 0:
+                print(f"You ran out of {x}")
             self.owner.change_money(orders_price)
             self.stock[x] -= can_sell
 
 
     def make_lemonade(self):
         if self.stock["lemon"] >= 1:
-            self.stock["lemonade"] += 1
-            self.stock["lemon"] -= 1
+            self.stock["lemonade"] += 10 + (10 * self.get_worker_amount()) if self.stock["lemon"] >= 10 + (10 * self.get_worker_amount()) else self.stock["lemon"]
+            self.stock["lemon"] -= 10 + (10 * self.get_worker_amount()) if self.stock["lemon"] >= 10 + (10 * self.get_worker_amount()) else self.stock["lemon"]
         else:
             print("You don't have enough lemons to make lemonade")
         
@@ -133,14 +140,16 @@ class LemonadeStand(Business):
             print(f"{i+1}. {all_actions[i+1]}")
         action = int(input("->"))
         actionFunction = {
-            "work in business" : lambda: self.append_to_work(self.owner),
-            "buy stock" : lambda: self.buy_stock(market=market), #self.buy_stock(market=market)
-            "make lemonade" : self.make_lemonade,
-            "sell lemonade" : self.sell_lemonade,
-            "show" : self.show_stock
+            "work in business" : (lambda: self.append_to_work(self.owner), 1),
+            "buy stock" : (lambda: self.buy_stock(market=market), 1), #self.buy_stock(market=market)
+            "make lemonade" : (self.make_lemonade, 1),
+            "sell lemonade" : (self.sell_lemonade, 1),
+            "show" : (self.show_stock, 0),
             }
         if action in all_actions:
-            actionFunction[all_actions[action]]()
+            actionFunction[all_actions[action]][0]()
+            return actionFunction[all_actions[action]][1]
+        return 0
 
 #ENTITIES
 class Entity:
@@ -212,7 +221,8 @@ class Market:
             "lemonade": 1,
         }
         for x in self.buy_prices:
-            self.sell_prices[x] = round(self.buy_prices[x]/1.5, 1)
+            if not x in self.sell_prices: 
+                self.sell_prices[x] = round(self.buy_prices[x]/1.5, 1)
 
     def get_buy_price(self, item):
         return self.buy_prices[item] if item in self.buy_prices else None
@@ -240,38 +250,37 @@ class GameManager:
 
     def start(self):
         self.mainPlayer.ownedBusinesses.append(LemonadeStand(self.mainPlayer))
-        self.mainPlayer.ownedBusinesses.append(LemonadeStand(self.mainPlayer))
-        self.mainPlayer.ownedBusinesses.append(LemonadeStand(self.mainPlayer, name="LemonsDeCalle"))
         self.mainPlayer.money = 100
     
     def next_day(self):
         self.days += 1
         print(f"\n\n\tDay {self.days}".center(20))
-        print(("-----" * 5).center(22))
         for x in self.entities:
             if x is self.mainPlayer:
                 continue
             x.money += 1
-
-        #Actions
-        while True:
-            avaibleActions = self.check_actions("player")
-            for i in range(len(avaibleActions)):
-                print(f"{i+1}. {avaibleActions[i+1]}")
+        energy = 1
+        while energy > 0:
+            #Actions
+            print(("-----" * 5).center(22))
             while True:
-                action = input("->")
-                if action.isdigit() and int(action) in avaibleActions:
-                    action = avaibleActions[int(action)]
-                    break
-                else:
-                    if not action.isdigit():
-                        print("Input not right. Has to be an intereger.\nTry again.")
-                    elif not int(action) in avaibleActions:
-                        print("Input not right. Has to be in actions listed.\nTry again.")
-            
-            self.doAction(action)
-            self.simulateTime()
-            break
+                avaibleActions = self.check_actions("player")
+                for i in range(len(avaibleActions)):
+                    print(f"{i+1}. {avaibleActions[i+1]}")
+                while True:
+                    action = input("->")
+                    if action.isdigit() and int(action) in avaibleActions:
+                        action = avaibleActions[int(action)]
+                        break
+                    else:
+                        if not action.isdigit():
+                            print("Input not right. Has to be an intereger.\nTry again.")
+                        elif not int(action) in avaibleActions:
+                            print("Input not right. Has to be in actions listed.\nTry again.")
+                
+                energy -= self.doAction(action)
+                self.simulateTime()
+                break
 
     def simulateTime(self):
         for businessEnt in [self.mainPlayer] + self.rivals:
@@ -282,6 +291,8 @@ class GameManager:
     def check_business(self, target: Business):
         if target.get_worker_amount() > 0:
             target.run_business(market=self.market)
+            if target.owner in target.get_workers():
+                target.remove_from_work(target.owner)
 
     def findPlayer(self):
         for x in entities:
@@ -328,7 +339,7 @@ class GameManager:
                     return
                 else:
                     print("Invalid number.\nTry again.")
-            targ_business.doActions(self.market)
+            return targ_business.doActions(self.market)
         
         def own_stats():
             targetEnt = self.mainPlayer
@@ -349,13 +360,16 @@ class GameManager:
                     sorted_businesses.sort(key=LLlib.get_name_var_from_dict)
                     for b in sorted_businesses:
                         print(f"\t{b["name"]} ({b["business_object"].get_type()}, id:{b["business_id"]})")
+            input("(enter anything to continue)\n->")
+            return 0
 
         actionFunction = {
             f"{self.mainPlayer}" : own_stats,
             "Manage businesses" : manage_businesses,
         }
         if action in actionFunction:
-            actionFunction[action]()
+            return actionFunction[action]()
+        return 0
 
     def buy_Bussines(self, buyer, bussinesType):
         print(f"{buyer} is buying {bussinesType}")

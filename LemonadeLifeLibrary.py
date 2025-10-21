@@ -63,7 +63,10 @@ def generate_last_name() -> list[str]:
         "Heikkinen",
         "Koskinen",
         "Järvinen",
-        "Rutanen"
+        "Rutanen",
+        "Kuikka",
+        "Leino",
+        "Saarinen",
     ]
 
 def get_name_var_from_dict(itemsdict:dict) -> any:
