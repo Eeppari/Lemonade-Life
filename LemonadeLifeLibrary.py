@@ -71,3 +71,13 @@ def generate_last_name() -> list[str]:
 
 def get_name_var_from_dict(itemsdict:dict) -> any:
     return itemsdict["name"]
+
+def ask_for_digit_and_check_in_dict(dictToCompare: dict) -> any:
+    while True:
+        inputToCheck = input("->")
+        if inputToCheck.isdigit() and int(inputToCheck) in dictToCompare:
+            return dictToCompare[int(inputToCheck)]
+        elif inputToCheck == "":
+            return None
+        else:
+            print("Invalid number.\nTry again.")

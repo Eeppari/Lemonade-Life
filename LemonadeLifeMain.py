@@ -31,6 +31,10 @@ class Business:
     def get_worker_amount(self) -> int:
         return len(self.workers)
     
+    def get_max_worker_amount(self) -> int:
+        print("This has not been done yet")
+        raise
+    
     def get_worker_sell_power(self) -> int:
         return self.get_worker_amount() * 10
     
@@ -120,13 +124,6 @@ class LemonadeStand(Business):
             self.stock["lemon"] -= 10 + (10 * self.get_worker_amount()) if self.stock["lemon"] >= 10 + (10 * self.get_worker_amount()) else self.stock["lemon"]
         else:
             print("You don't have enough lemons to make lemonade")
-        
-    def sell_lemonade(self, market) -> None: #Can be changed to Business class
-        if self.stock["lemonade"] >= 1:
-            self.stock["lemonade"] -= 1
-            self.owner.change_money(market.get_sell_price("lemonade"))
-        else:
-            print("You don't have any lemonade!")
     
     def show_stock(self):
         print(f"{self.name} has:")
@@ -141,9 +138,8 @@ class LemonadeStand(Business):
         action = int(input("->"))
         actionFunction = {
             "work in business" : (lambda: self.append_to_work(self.owner), 1),
-            "buy stock" : (lambda: self.buy_stock(market=market), 1), #self.buy_stock(market=market)
+            "buy stock" : (lambda: self.buy_stock(market=market), 0), #self.buy_stock(market=market)
             "make lemonade" : (self.make_lemonade, 1),
-            "sell lemonade" : (self.sell_lemonade, 1),
             "show" : (self.show_stock, 0),
             }
         if action in all_actions:
@@ -176,15 +172,22 @@ class Player(Entity):
         self.money : int = 0
         super().__init__(fName=fName, lName=lName, age=age, money=self.money)
         self.ownedBusinesses: list[Business] = []
+        self.workers : list[Worker] = []
 
     def get_owned_businesses(self) -> list:
         return self.ownedBusinesses
 
+    def hire_worker(self):
+        self.workers.append(Worker())
+
 class NPC(Entity):
-    def __init__(self, fName = None, lName = None, age = 18, gender = choice(["M", "F"]), money = None):
+    def __init__(self, fName = None, lName = None, age = 18, gender = None, money = None):
+        if gender == None:
+            gender = choice(["M", "F"])
         fName = fName if fName != None else self.generate_npc_fname(gender=gender)
         lName = lName if lName != None else self.generate_npc_lname()
         self.money = money if money != None else randrange(100, 1000)
+        self.gender : str = gender
         super().__init__(fName=fName, lName=lName, age=age, money=self.money)
     
     def generate_npc_fname(self, gender):
@@ -200,12 +203,33 @@ class Rival(NPC):
     def __init__(self, fName = None, lName = None, age = 18):
         super().__init__(fName=fName, lName=lName, age=age)
         self.ownedBusinesses: list[Business] = []
+        self.workers : list[Worker] = []
 
     def get_owned_businesses(self) -> list:
         return self.ownedBusinesses
+    
+    def hire_worker(self):
+        hired_worker = Worker()
+        self.workers.append(hired_worker)
+        print(f"You hired {hired_worker}")
+        
 
     def badWord(self):
         print("BADWORD")
+
+class Worker(NPC):
+    def __init__(self, fName=None, lName=None, age=18, gender=None, money=None):
+        super().__init__(fName, lName, age, gender, money)
+        self.workBusiness = None
+
+    def get_work_business(self) -> Business|None:
+        return self.workBusiness
+    
+    def set_work_business(self, targBusiness: Business) -> None:
+        self.workBusiness = targBusiness
+
+    def remove_from_work_business(self):
+        self.workBusiness = None
 
 class Citizen(NPC):
     def buy(self):
@@ -279,8 +303,8 @@ class GameManager:
                             print("Input not right. Has to be in actions listed.\nTry again.")
                 
                 energy -= self.doAction(action)
-                self.simulateTime()
                 break
+        self.simulateTime()
 
     def simulateTime(self):
         for businessEnt in [self.mainPlayer] + self.rivals:
@@ -306,18 +330,25 @@ class GameManager:
             actionList.append(f"{self.mainPlayer}")
             if self.mainPlayer.ownedBusinesses:
                 actionList.append("Manage businesses")
+                actionList.append("Manage workers")
             if self.rivals:
                 actionList.append("See rivals")
 
         elif actionsType == "all_businesses_player":
             for x in self.mainPlayer.ownedBusinesses:
                 actionList.append(x)
+        
+        elif actionsType == "worker_management":
+            actionList.append("Hire workers")
+            if self.mainPlayer.workers != []:
+                actionList.append("Append workers to business")
+                actionList.append("Remove workers from business")
+
 
         elif actionsType == "lemonade_stand":
             actionList.append("work in business")
             actionList.append("buy stock")
             actionList.append("make lemonade")
-            actionList.append("sell lemonade")
             actionList.append("show")
 
         else:
@@ -336,10 +367,72 @@ class GameManager:
                     targ_business = all_businesses[int(targ_business)]
                     break
                 elif targ_business == "":
-                    return
+                    return 0
                 else:
                     print("Invalid number.\nTry again.")
             return targ_business.doActions(self.market)
+        
+        def manage_workers():
+            worker_management_actions = self.check_actions("worker_management")
+            for i in range(len(worker_management_actions)): #List all of the possible actions in worker_management page
+                print(f"{i+1}. {str(worker_management_actions[i+1])}")
+            sel_action: str = LLlib.ask_for_digit_and_check_in_dict(worker_management_actions)
+
+            #Execute actions
+            if sel_action == "Hire workers":
+                self.mainPlayer.hire_worker()
+                return 0 #Energy cost
+            if sel_action == "Append workers to business":
+                businessList: dict[int, Business] = self.check_actions("all_businesses_player")
+                sort_to_back: list = []
+                print("\nSelect business")
+                for i in range(len(businessList)): #index, business
+                    #if b.get_worker_amount() == b.get_max_worker_amount():
+                        #sort_to_back.append(b)
+                    print(f"{i+1}. {businessList[i+1]}")
+                targ_business: Business = LLlib.ask_for_digit_and_check_in_dict(businessList)
+                if targ_business == None:
+                    return 0
+                else:
+                    available_workers = []
+                    print("Select worker")
+                    for i in range(len(self.mainPlayer.workers)):
+                        if not self.mainPlayer.workers[i].get_work_business():
+                            available_workers.append(self.mainPlayer.workers[i])
+                            print(f"{len(available_workers)}. {self.mainPlayer.workers[i]}")
+                    if available_workers:
+                        targ_worker: Worker = LLlib.ask_for_digit_and_check_in_dict(dict(enumerate(available_workers, 1)))
+                        targ_business.append_to_work(targ_worker)
+                        targ_worker.set_work_business(targ_business)
+                        print(f"{targ_worker} now works in {targ_business}")
+                        return 0
+                    else:
+                        print("No available workers")
+                        return 0
+            if sel_action == "Remove workers from business":
+                businessListAll: dict[int, Business] = self.check_actions("all_businesses_player")
+                businessListHasWorkers: list[Business] = []
+                print("\nSelect business")
+                for i in range(len(businessListAll)):
+                    if businessListAll[i+1].get_worker_amount() > 0:
+                        businessListHasWorkers.append(businessListAll[i+1])
+                        print(f"{len(businessListHasWorkers)}. {businessListAll[i+1]}")
+                targ_business = LLlib.ask_for_digit_and_check_in_dict(dict(enumerate(businessListHasWorkers, 1)))
+                if targ_business == None:
+                    return 0
+                else:
+                    print("Select worker to remove")
+                    for i in range(targ_business.get_worker_amount()):
+                        print(f"{i+1}. {targ_business.get_workers()[i]}")
+                    targ_worker = LLlib.ask_for_digit_and_check_in_dict(dict(enumerate(targ_business.get_workers(), 1)))
+                    targ_worker.remove_from_work_business()
+                    targ_business.remove_from_work(targ_worker)
+                    print(f"{targ_worker} has been removed from {targ_business}")
+                    return 0
+            
+            #Tee funktioina tai if juttuina
+            #Hire, append, remove
+            
         
         def own_stats():
             targetEnt = self.mainPlayer
@@ -366,6 +459,7 @@ class GameManager:
         actionFunction = {
             f"{self.mainPlayer}" : own_stats,
             "Manage businesses" : manage_businesses,
+            "Manage workers" : manage_workers,
         }
         if action in actionFunction:
             return actionFunction[action]()
@@ -374,7 +468,7 @@ class GameManager:
     def buy_Bussines(self, buyer, bussinesType):
         print(f"{buyer} is buying {bussinesType}")
 
-entities = [Player("Eetu", "Rutanen", 15), Citizen(), Citizen(), Rival(), Rival()]
+entities = [Player("Eetu", "Rutanen", 15)]
 Game = GameManager(entities=entities, market=Market())
 Game.start()
 for x in Game.entities:
@@ -390,5 +484,5 @@ TestRun = False #if you need to make test and skip the game
 if TestRun:
     exit()
 #GAME
-for i in range(10):
+for i in range(40):
     Game.next_day()
