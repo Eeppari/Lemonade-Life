@@ -72,7 +72,13 @@ def generate_last_name() -> list[str]:
 def get_name_var_from_dict(itemsdict:dict) -> any:
     return itemsdict["name"]
 
+def input_anything_to_continue(CustomText: str = "Enter anything to continue", CustomInputPrompt: str = "->") -> None:
+    """By default print enter anything to continue and waits until its given an input. Will return none"""
+    print(CustomText)
+    input(CustomInputPrompt)
+
 def ask_for_digit_and_check_in_dict(dictToCompare: dict) -> any:
+    """Ask for an input until given input is a digit and in given dictionary"""
     while True:
         inputToCheck = input("->")
         if inputToCheck.isdigit() and int(inputToCheck) in dictToCompare:

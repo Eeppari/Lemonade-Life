@@ -2,6 +2,7 @@ import LemonadeLifeLibrary as LLlib
 from random import choice, choices, randrange
 from decimal import Decimal
 from collections import Counter
+from time import sleep
 
 class Business:
     nextid = 0
@@ -11,6 +12,9 @@ class Business:
         self.type : str = business_type
         self.id : int = Business.nextid
         self.workers : list = []
+        self.bills : dict[str, function] = {
+            "wages" : self.get_wages,
+        }
         self.max_customers: int = 0
         self.stock : dict = {}
         self.sellable_items : list = []
@@ -43,6 +47,20 @@ class Business:
 
     def remove_from_work(self, worker: "Entity"):
         self.workers.remove(worker)
+
+    def get_wages(self):
+        return self.get_worker_amount() * 3
+    
+    def get_bills(self, specification: str = "all"):
+        """
+        Bills types are
+        all -> all of the bills,
+        wages -> combined wages of all of the workers in the business
+        """
+        if specification != "all":
+            return self.bills[specification]()
+        else:
+            return self.bills
 
     def buy_stock(self, market, item = None, amount = None) -> None:
         market : Market = market
@@ -98,48 +116,59 @@ class LemonadeStand(Business):
         return self.stock
 
     def run_business(self, market:"Market"):
-        print("Running: run_business")
         #Check how many customers
-        coming_customers : int = self.get_worker_sell_power() if self.get_worker_sell_power() <= self.max_customers else self.max_customers
-        max_orders = 4
-        orders: dict = dict(Counter(choices(self.sellable_items, k=max_orders*coming_customers)))
+        coming_customers: int = randrange(self.get_worker_sell_power() - self.get_worker_amount(), self.get_worker_sell_power() +1 ) if self.get_worker_sell_power() <= self.max_customers else self.max_customers
+        max_orders: int = 4
+        orders_amount: int = sum(randrange(1, max_orders) for x in range(coming_customers))
+        print(coming_customers)
+        print(orders_amount)
+        orders: dict = dict(Counter(choices(self.sellable_items, k=orders_amount)))
         for x in orders:
             if self.stock[x] <= 0:
                 can_sell = 0
-                print(f"You are out of {x}")
+                print(f"{self.name} is out of {x}")
             else:
                 can_sell : int = orders[x] if orders[x] < self.stock[x] else self.stock[x]
             orders_price: int = market.get_sell_price(x) * can_sell
             if self.stock[x] > 0:
-                print(f"You sold {can_sell} {x} for {orders_price}€")
+                print(f"{self.name} sold {can_sell} {x} for {orders_price}€")
             if can_sell == self.stock[x] and self.stock[x] != 0:
-                print(f"You ran out of {x}")
+                print(f"{self.name} ran out of {x}")
             self.owner.change_money(orders_price)
             self.stock[x] -= can_sell
 
 
-    def make_lemonade(self):
+    def make_lemonade(self) -> None:
+        #Does not consume energy but takes time to make lemonade
+        #Make time like 1s
         if self.stock["lemon"] >= 1:
-            self.stock["lemonade"] += 10 + (10 * self.get_worker_amount()) if self.stock["lemon"] >= 10 + (10 * self.get_worker_amount()) else self.stock["lemon"]
-            self.stock["lemon"] -= 10 + (10 * self.get_worker_amount()) if self.stock["lemon"] >= 10 + (10 * self.get_worker_amount()) else self.stock["lemon"]
+            print("Making lemonade...")
+            sleep(1)
+            lemonade_made = 10 + (10 * self.get_worker_amount()) if self.stock["lemon"] >= 10 + (10 * self.get_worker_amount()) else self.stock["lemon"]
+            self.stock["lemonade"] += lemonade_made
+            self.stock["lemon"] -= lemonade_made
+            print(f"Made {lemonade_made} lemonade")
+            sleep(0.5)
         else:
             print("You don't have enough lemons to make lemonade")
+            LLlib.input_anything_to_continue()
     
     def show_stock(self):
         print(f"{self.name} has:")
         for x in self.stock:
             print(f"\t{x} - {self.stock[x]}")
-        input("(enter anything to continue)\n->")
+        LLlib.input_anything_to_continue()
     
     def doActions(self, market):
         all_actions = Game.check_actions("lemonade_stand")
+        print(f"{self.name}:")
         for i in range(len(all_actions)):
             print(f"{i+1}. {all_actions[i+1]}")
         action = int(input("->"))
         actionFunction = {
             "work in business" : (lambda: self.append_to_work(self.owner), 1),
             "buy stock" : (lambda: self.buy_stock(market=market), 0), #self.buy_stock(market=market)
-            "make lemonade" : (self.make_lemonade, 1),
+            "make lemonade" : (self.make_lemonade, 0),
             "show" : (self.show_stock, 0),
             }
         if action in all_actions:
@@ -177,8 +206,20 @@ class Player(Entity):
     def get_owned_businesses(self) -> list:
         return self.ownedBusinesses
 
-    def hire_worker(self):
-        self.workers.append(Worker())
+    def hire_worker(self) -> None:
+        hired_worker = Worker()
+        self.workers.append(hired_worker)
+        print(f"You hired {hired_worker}")
+
+    def fire_worker(self, workerToFire: "Worker", leftByOwn: bool = False) -> None:
+        if workerToFire in self.workers:
+            self.workers.remove(workerToFire)
+            if not leftByOwn:
+                print(f"You fired {workerToFire}")
+        else:
+            print("ERROR: Worker not found or doesn't work for this entity.")
+            raise
+
 
 class NPC(Entity):
     def __init__(self, fName = None, lName = None, age = 18, gender = None, money = None):
@@ -211,7 +252,7 @@ class Rival(NPC):
     def hire_worker(self):
         hired_worker = Worker()
         self.workers.append(hired_worker)
-        print(f"You hired {hired_worker}")
+        print(f"{self} hired {hired_worker}")
         
 
     def badWord(self):
@@ -317,6 +358,16 @@ class GameManager:
             target.run_business(market=self.market)
             if target.owner in target.get_workers():
                 target.remove_from_work(target.owner)
+                
+                wages_to_pay = target.get_bills("wages")
+                if target.owner.get_money() >= wages_to_pay:
+                    target.owner.change_money(wages_to_pay * -1)
+                    print(f"You paid {wages_to_pay}€ for wages in {target}")
+                else:
+                    random_worker = choice(target.get_workers())
+                    target.owner.fire_worker(random_worker)
+                    target.remove_from_work(random_worker)
+                    print(f"{random_worker} has left becouse you do not have enough money to pay his wage")
 
     def findPlayer(self):
         for x in entities:
@@ -361,15 +412,7 @@ class GameManager:
             all_businesses = self.check_actions("all_businesses_player")
             for i in range(len(all_businesses)):
                 print(f"{i+1}. {str(all_businesses[i+1])}")
-            while True:
-                targ_business = input("->")
-                if targ_business.isdigit() and int(targ_business) in all_businesses:
-                    targ_business = all_businesses[int(targ_business)]
-                    break
-                elif targ_business == "":
-                    return 0
-                else:
-                    print("Invalid number.\nTry again.")
+            targ_business = LLlib.ask_for_digit_and_check_in_dict(all_businesses)
             return targ_business.doActions(self.market)
         
         def manage_workers():
@@ -402,6 +445,8 @@ class GameManager:
                             print(f"{len(available_workers)}. {self.mainPlayer.workers[i]}")
                     if available_workers:
                         targ_worker: Worker = LLlib.ask_for_digit_and_check_in_dict(dict(enumerate(available_workers, 1)))
+                        if targ_worker == None:
+                            return 0
                         targ_business.append_to_work(targ_worker)
                         targ_worker.set_work_business(targ_business)
                         print(f"{targ_worker} now works in {targ_business}")
@@ -479,7 +524,6 @@ for x in Game.entities:
         print("Is a NPC")
 
 TestRun = False #if you need to make test and skip the game
-
 #TESTS
 if TestRun:
     exit()
