@@ -5,12 +5,12 @@ from collections import Counter
 from time import sleep
 
 class Business:
-    nextid = 0
+    nextId = 0
     def __init__(self, owner, name: str, business_type: str):
         self.owner : Player|Rival = owner
         self.name : str = name
         self.type : str = business_type
-        self.id : int = Business.nextid
+        self.id : int = Business.nextId
         self.workers : list = []
         self.bills : dict[str, function] = {
             "wages" : self.get_wages,
@@ -18,7 +18,7 @@ class Business:
         self.max_customers: int = 0
         self.stock : dict = {}
         self.sellable_items : list = []
-        Business.nextid += 1
+        Business.nextId += 1
     
     def set_owner(self, newOwner):
         self.owner = newOwner
@@ -57,7 +57,7 @@ class Business:
         all -> all of the bills,
         wages -> combined wages of all of the workers in the business
         """
-        if specification != "all":
+        if specification != "all" and specification in self.bills:
             return self.bills[specification]()
         else:
             return self.bills
@@ -120,8 +120,6 @@ class LemonadeStand(Business):
         coming_customers: int = randrange(self.get_worker_sell_power() - self.get_worker_amount(), self.get_worker_sell_power() +1 ) if self.get_worker_sell_power() <= self.max_customers else self.max_customers
         max_orders: int = 4
         orders_amount: int = sum(randrange(1, max_orders) for x in range(coming_customers))
-        print(coming_customers)
-        print(orders_amount)
         orders: dict = dict(Counter(choices(self.sellable_items, k=orders_amount)))
         for x in orders:
             if self.stock[x] <= 0:
@@ -178,11 +176,14 @@ class LemonadeStand(Business):
 
 #ENTITIES
 class Entity:
+    nextEntId: int = 0
     def __init__(self, fName, lName: str, age: int, money: int = 0):
         self.fName : str = fName
         self.lName : str = lName
         self.age : int = age
         self.money : int = money
+        self.entId : int = Entity.nextEntId
+        Entity.nextEntId += 1
 
     def get_money(self) -> int:
         return self.money
@@ -192,6 +193,9 @@ class Entity:
 
     def change_money(self, amount:int) -> None:
         self.money += amount
+
+    def get_entity_id(self) -> int:
+        return self.entId
 
     def __str__(self):
         return f"{self.fName} {self.lName}"
@@ -205,6 +209,9 @@ class Player(Entity):
 
     def get_owned_businesses(self) -> list:
         return self.ownedBusinesses
+    
+    def get_workers(self) -> list:
+        return self.workers
 
     def hire_worker(self) -> None:
         hired_worker = Worker()
@@ -218,6 +225,7 @@ class Player(Entity):
                 print(f"You fired {workerToFire}")
         else:
             print("ERROR: Worker not found or doesn't work for this entity.")
+            print(f"\tEntity gotten: {workerToFire}\n\t{self}'s workers: {[str(x) for x in self.workers]}")
             raise
 
 
@@ -249,11 +257,23 @@ class Rival(NPC):
     def get_owned_businesses(self) -> list:
         return self.ownedBusinesses
     
+    def get_workers(self) -> list:
+        return self.workers
+    
     def hire_worker(self):
         hired_worker = Worker()
         self.workers.append(hired_worker)
         print(f"{self} hired {hired_worker}")
-        
+
+    def fire_worker(self, workerToFire: "Worker", leftByOwn: bool = False) -> None:
+        if workerToFire in self.workers:
+            self.workers.remove(workerToFire)
+            if not leftByOwn:
+                print(f"{self} fired {workerToFire}")
+        else:
+            print("ERROR: Worker not found or doesn't work for this entity.")
+            print(f"\tEntity gotten: {workerToFire}\n\t{self}'s workers: {[str(x) for x in self.workers]}")
+            raise        
 
     def badWord(self):
         print("BADWORD")
@@ -359,15 +379,15 @@ class GameManager:
             if target.owner in target.get_workers():
                 target.remove_from_work(target.owner)
                 
-                wages_to_pay = target.get_bills("wages")
-                if target.owner.get_money() >= wages_to_pay:
-                    target.owner.change_money(wages_to_pay * -1)
-                    print(f"You paid {wages_to_pay}€ for wages in {target}")
-                else:
-                    random_worker = choice(target.get_workers())
-                    target.owner.fire_worker(random_worker)
-                    target.remove_from_work(random_worker)
-                    print(f"{random_worker} has left becouse you do not have enough money to pay his wage")
+            wages_to_pay = target.get_bills("wages")
+            if target.owner.get_money() >= wages_to_pay:
+                target.owner.change_money(wages_to_pay * -1)
+                print(f"You paid {wages_to_pay}€ for wages in {target}")
+            else:
+                random_worker = choice(target.get_workers())
+                target.owner.fire_worker(random_worker)
+                target.remove_from_work(random_worker)
+                print(f"{random_worker} has left becouse you do not have enough money to pay his wage")
 
     def findPlayer(self):
         for x in entities:
@@ -384,6 +404,11 @@ class GameManager:
                 actionList.append("Manage workers")
             if self.rivals:
                 actionList.append("See rivals")
+        
+        elif actionsType == "business_management":
+            actionList.append("Create business")
+            for x in self.mainPlayer.ownedBusinesses:
+                actionList.append(x)
 
         elif actionsType == "all_businesses_player":
             for x in self.mainPlayer.ownedBusinesses:
@@ -409,11 +434,26 @@ class GameManager:
     
     def doAction(self, action):
         def manage_businesses():
-            all_businesses = self.check_actions("all_businesses_player")
-            for i in range(len(all_businesses)):
-                print(f"{i+1}. {str(all_businesses[i+1])}")
-            targ_business = LLlib.ask_for_digit_and_check_in_dict(all_businesses)
-            return targ_business.doActions(self.market)
+            business_management_actions = self.check_actions("business_management")
+            for i in range(len(business_management_actions)):
+                print(f"{i+1}. {str(business_management_actions[i+1])}")
+            targ_business: Business | str = LLlib.ask_for_digit_and_check_in_dict(business_management_actions)
+            if issubclass(type(targ_business), Business):
+                return targ_business.doActions(self.market)
+            elif type(targ_business) == str:
+                if targ_business == "Create business":
+                    creating_cost = 1000
+                    if self.mainPlayer.get_money() >= creating_cost:
+                        if input(f"Creating a new business will cost {creating_cost}€. \nDo you want to create a business? (Y/N)").lower() == "y":
+                            newBusinessName = input("Input the name for business\n-> ")
+                            self.create_Business(self.mainPlayer, LemonadeStand, newBusinessName)
+                            self.mainPlayer.change_money(creating_cost * -1)
+                        else:
+                            return 0
+                    else:
+                        print("You don't have enought money!")
+                        return 0
+                return 0
         
         def manage_workers():
             worker_management_actions = self.check_actions("worker_management")
@@ -484,11 +524,12 @@ class GameManager:
             stats_to_show = {
                 "age" : targetEnt.age,
                 "money" : targetEnt.get_money(),
-                "owned businesses" : targetEnt.ownedBusinesses
+                "owned businesses" : targetEnt.ownedBusinesses,
+                "workers" : targetEnt.get_workers(),
             }
             print(f"\n\n{targetEnt.fName} {targetEnt.lName}:")
             for stat in stats_to_show:
-                if not stat in ["owned businesses"]:
+                if not stat in ["owned businesses", "workers"]:
                     print(f"\t{stat.capitalize()}: {stats_to_show[stat]}")
                 elif stat == "owned businesses":
                     print("Owned businesses:")
@@ -498,6 +539,15 @@ class GameManager:
                     sorted_businesses.sort(key=LLlib.get_name_var_from_dict)
                     for b in sorted_businesses:
                         print(f"\t{b["name"]} ({b["business_object"].get_type()}, id:{b["business_id"]})")
+                elif stat == "workers":
+                    print("Workers:")
+                    sorted_workers = []
+                    for x in stats_to_show["workers"]:
+                        x : Worker
+                        sorted_workers.append({"name":str(x), "works_in":x.get_work_business().name if x.get_work_business() != None else None, "entity_id":x.get_entity_id()})
+                    sorted_workers.sort(key=LLlib.get_name_var_from_dict)
+                    for w in sorted_workers:
+                        print(f"\t{w["name"]} ({f"Works in {w["works_in"]}" if w["works_in"] != None else "Isn't working"}, Entity id: {w["entity_id"]})")
             input("(enter anything to continue)\n->")
             return 0
 
@@ -510,8 +560,13 @@ class GameManager:
             return actionFunction[action]()
         return 0
 
-    def buy_Bussines(self, buyer, bussinesType):
-        print(f"{buyer} is buying {bussinesType}")
+    def buy_Business(self, buyer, businessType):
+        print(f"{buyer} is buying {businessType}")
+
+    def create_Business(self, owner: Player|Rival, businessType, businessName):
+        if businessType == LemonadeStand:
+            created_business = LemonadeStand(owner=owner, name= businessName if businessName != "" else None)
+        owner.ownedBusinesses.append(created_business)
 
 entities = [Player("Eetu", "Rutanen", 15)]
 Game = GameManager(entities=entities, market=Market())

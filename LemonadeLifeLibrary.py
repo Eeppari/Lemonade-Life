@@ -67,6 +67,7 @@ def generate_last_name() -> list[str]:
         "Kuikka",
         "Leino",
         "Saarinen",
+        "Arola"
     ]
 
 def get_name_var_from_dict(itemsdict:dict) -> any:
